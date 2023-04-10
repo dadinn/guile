@@ -1,12 +1,17 @@
 (define-module (ice-9 expect-hygienic)
   #:export
   (expect expect-strings
-   expect-chars))
+   expect-chars interact))
 
 (use-modules
  ((ice-9 regex) #:select
   (match:substring
    match:count))
+ ((ice-9 threads) #:select
+  (cancel-thread thread-exited?
+   call-with-new-thread))
+ ((ice-9 rdelim) #:select
+  (read-line)))
 
 (define expect-port
   (make-parameter #f))
@@ -234,3 +239,54 @@
                 (expect-timeout-proc expect-timeout-proc-stx))
              (expect-with-bindings
               () () (clause clauses ...))))))))
+
+(define-syntax interact
+  (lambda (stx)
+    (syntax-case stx ()
+      ((interact output-port)
+       #'(interact (current-input-port) output-port))
+      ((interact input-port output-port)
+       (with-syntax
+           ((expect-port-stx
+             (or (syntax-capture #'interact 'expect-port)
+                 #'(or (expect-port) (current-input-port))))
+            (expect-char-proc-stx
+             (or (syntax-capture #'interact 'expect-char-proc)
+                 #'(or (expect-char-proc) display)))
+            (expect-eof-proc-stx
+             (or (syntax-capture #'interact 'expect-eof-proc)
+                 #'(expect-eof-proc))))
+         #'(let* ((char-proc expect-char-proc-stx)
+                  (interact-input-port input-port)
+                  (interact-output-port output-port)
+                  (interact-thread
+                   (call-with-new-thread
+                    (lambda ()
+                      (let loop ((line (read-line interact-input-port)))
+                        (unless
+                            (or (eof-object? line)
+                                (string-ci=? line ",return"))
+                          (display line interact-output-port)
+                          (newline interact-output-port)
+                          (force-output interact-output-port)
+                          (loop (read-line interact-input-port))))
+                      (newline interact-output-port)
+                      (force-output interact-output-port)))))
+             (dynamic-wind
+               (const #t)
+               (lambda ()
+                 (parameterize
+                     ((expect-port expect-port-stx)
+                      (expect-eof-proc expect-eof-proc-stx)
+                      (expect-timeout #f)
+                      (expect-timeout-proc #f))
+                   (when (eq? (expect-port) interact-input-port)
+                     (error "expect and interact input ports are the same"))
+                   (expect-with-bindings
+                    () ()
+                    (((lambda (content char)
+                        (when (and char-proc char)
+                          (char-proc char))
+                        (thread-exited? interact-thread)))))))
+               (lambda ()
+                 (cancel-thread interact-thread)))))))))
