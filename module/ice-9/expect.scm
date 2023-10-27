@@ -1,4 +1,4 @@
-(define-module (ice-9 expect-hygienic)
+(define-module (ice-9 expect)
   #:export
   (expect
    expect-strings

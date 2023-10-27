@@ -3,7 +3,7 @@
  (dirname (dirname (current-filename))))
 
 (use-modules
- ((ice-9 expect-hygienic))
+ ((ice-9 expect))
  ((srfi srfi-64))
  ((ice-9 threads) #:select
   (call-with-new-thread
