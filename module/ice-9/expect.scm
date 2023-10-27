@@ -1,3 +1,28 @@
+;;;; 	Copyright (C) 1996, 1998, 1999, 2001, 2006 Free Software Foundation, Inc.
+;;;;
+;;;; This library is free software; you can redistribute it and/or
+;;;; modify it under the terms of the GNU Lesser General Public
+;;;; License as published by the Free Software Foundation; either
+;;;; version 3 of the License, or (at your option) any later version.
+;;;; 
+;;;; This library is distributed in the hope that it will be useful,
+;;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+;;;; Lesser General Public License for more details.
+;;;; 
+;;;; You should have received a copy of the GNU Lesser General Public
+;;;; License along with this library; if not, write to the Free Software
+;;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+;;;;
+
+;;; Commentary:
+
+;; This module is documented in the Guile Reference Manual.
+;; These macros are exported:
+;;    expect, expect-chars, expect-strings, interact.
+
+;;; Code:
+
 (define-module (ice-9 expect)
   #:export
   (expect
@@ -129,6 +154,9 @@
           (datum->syntax stx sym)))
    (syntax-locally-bound-identifiers stx)))
 
+
+;;; expect: each test is a procedure which is applied to the accumulating
+;;; string.
 (define-syntax expect
   (lambda (stx)
     (syntax-case stx ()
@@ -164,6 +192,9 @@
                       (matcher-inner-binding content (not char))))
                   body ...) ...)))))))))
 
+;;; match a string against a regexp, returning a list of strings (required
+;;; by the => syntax) or #f.  called once each time a character is added
+;;; to s (eof? will be #f), and once when eof is reached (with eof? #t).
 (define (expect-regexec rx s eof? exec-flags)
   ;; if expect-strings-exec-flags contains regexp/noteol,
   ;; remove it for the eof test.
@@ -177,6 +208,8 @@
             ((< i 0) result))
         #f)))
 
+;;; the regexec front-end to expect:
+;;; each test must evaluate to a regular expression.
 (define-syntax expect-strings
   (lambda (stx)
     (syntax-case stx ()
@@ -295,3 +328,5 @@
                         (thread-exited? interact-thread)))))))
                (lambda ()
                  (cancel-thread interact-thread)))))))))
+
++;;; expect.scm ends here
