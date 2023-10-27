@@ -1,6 +1,7 @@
 (define-module (ice-9 expect-hygienic)
   #:export
   (expect
+   expect-chars
    *expect-port*
    *expect-char-proc*
    *expect-eof-proc*
@@ -73,7 +74,6 @@
         ;; no more clauses
         ())
        #'(let* ((input-port (*expect-port*))
-                (char-proc (*expect-char-proc*))
                 (eof-proc (*expect-eof-proc*))
                 (timeout-proc (*expect-timeout-proc*))
                 (timeout (*expect-timeout*))
@@ -90,19 +90,20 @@
              (if (and timeout (not (expect-select input-port timeout)))
                  (and timeout-proc (timeout-proc content))
                  (let* ((char (read-char input-port))
-                        (eof? (eof-object? char))
+                        (char (and (not (eof-object? char)) char))
                         (next-content
-                         (if (not eof?)
+                         (if char
                              (string-append
                               content (string char))
                              content)))
-                   (when char-proc
-                     (char-proc char))
                    (cond
-                    ((matcher-binding next-content eof?) body ...)
+                    ((matcher-binding next-content char)
+                     body ...)
                     ...
-                    (eof? (and eof-proc (eof-proc content)))
-                    (else (loop next-content)))))))))))
+                    ((not char)
+                     (and eof-proc (eof-proc content)))
+                    (else
+                     (loop next-content)))))))))))
 
 (define (syntax-capture stx sym)
   "Capture identifier from syntax context, or return false if not found."
@@ -115,7 +116,7 @@
 (define-syntax expect
   (lambda (stx)
     (syntax-case stx ()
-      ((expect clause clauses ...)
+      ((expect (matcher-with-eof-flag body ...) ...)
        (with-syntax
            ((expect-port-stx
              (or (syntax-capture #'expect 'expect-port)
@@ -132,9 +133,40 @@
             (expect-timeout-proc-stx
              (or (syntax-capture #'expect 'expect-timeout-proc)
                  #'(*expect-timeout-proc*))))
+         #'(let* ((char-proc expect-char-proc-stx))
+             (parameterize
+                 ((*expect-port* expect-port-stx)
+                  (*expect-eof-proc* expect-eof-proc-stx)
+                  (*expect-timeout* expect-timeout-stx)
+                  (*expect-timeout-proc* expect-timeout-proc-stx))
+               (expect-with-bindings
+                () ()
+                (((let ((matcher-inner-binding matcher-with-eof-flag))
+                    (lambda (content char)
+                      (when (and char-proc char)
+                        (char-proc char))
+                      (matcher-inner-binding content (not char))))
+                  body ...) ...)))))))))
+
+(define-syntax expect-chars
+  (lambda (stx)
+    (syntax-case stx ()
+      ((expect-chars clause clauses ...)
+       (with-syntax
+           ((expect-port-stx
+             (or (syntax-capture #'expect-chars 'expect-port)
+                 #'(or (*expect-port*) (current-input-port))))
+            (expect-eof-proc-stx
+             (or (syntax-capture #'expect-chars 'expect-eof-proc)
+                 #'(*expect-eof-proc*)))
+            (expect-timeout-stx
+             (or (syntax-capture #'expect-chars 'expect-timeout)
+                 #'(*expect-timeout*)))
+            (expect-timeout-proc-stx
+             (or (syntax-capture #'expect-chars 'expect-timeout-proc)
+                 #'(*expect-timeout-proc*))))
          #'(parameterize
                ((*expect-port* expect-port-stx)
-                (*expect-char-proc* expect-char-proc-stx)
                 (*expect-eof-proc* expect-eof-proc-stx)
                 (*expect-timeout* expect-timeout-stx)
                 (*expect-timeout-proc* expect-timeout-proc-stx))
